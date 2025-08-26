@@ -79,3 +79,8 @@ public macro fun invalid_rejection_threshold_specific(): u64 {
 public macro fun invalid_expiration_duration(): u64 {
     15
 }
+
+/// Error code for request already passed threshold
+public macro fun request_already_passed_threshold(): u64 {
+    16
+}

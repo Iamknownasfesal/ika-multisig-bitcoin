@@ -401,6 +401,8 @@ public fun vote_request(
     assert!(request.status == RequestStatus::Pending, error::request_not_pending!());
     assert!(self.members.contains(&ctx.sender()), error::caller_not_member!());
     assert!(!request.votes.contains(ctx.sender()), error::already_voted!());
+    assert!(request.approvers_count < self.approval_threshold, error::request_already_passed_threshold!());
+    assert!(request.rejecters_count < self.rejection_threshold, error::request_already_passed_threshold!());
 
     if (clock.timestamp_ms() > request.created_at + self.expiration_duration) {
         request.status = RequestStatus::Rejected;
