@@ -224,13 +224,13 @@ public enum RequestResult has copy, drop, store {
 ///
 /// # Arguments
 /// * `coordinator` - The IKA dWallet coordinator for managing the distributed key generation
-/// * `payment_ika` - IKA tokens for paying the DKG protocol fees
-/// * `payment_sui` - SUI tokens for paying the DKG protocol fees
+/// * `initial_ika_coin_for_balance` - Initial IKA tokens to fund the wallet's balance for protocol fees
+/// * `initial_sui_coin_for_balance` - Initial SUI tokens to fund the wallet's balance for protocol fees
 /// * `dwallet_network_encryption_key_id` - ID of the network encryption key for secure communication
 /// * `members` - List of member addresses who can vote on transactions
 /// * `approval_threshold` - Number of approvals required to execute transactions
 /// * `rejection_threshold` - Number of rejections required to reject transactions
-/// * `expiration_duration` - How long requests remain valid (in seconds)
+/// * `expiration_duration` - How long requests remain valid (in milliseconds)
 /// * `ctx` - Transaction context for creating the shared object
 ///
 /// # Returns
@@ -293,13 +293,11 @@ public fun new_multisig(
 /// * `self` - Mutable reference to the multisig wallet being initialized
 /// * `coordinator` - The IKA dWallet coordinator managing the DKG process
 /// * `first_round_session_identifier` - Session ID from the first DKG round
-/// * `payment_ika` - IKA tokens for paying the second round protocol fees
-/// * `payment_sui` - SUI tokens for paying the second round protocol fees
 /// * `centralized_public_key_share_and_proof` - Public key share with cryptographic proof
 /// * `encrypted_centralized_secret_share_and_proof` - Encrypted secret share with proof
 /// * `user_public_output` - User's public output from the DKG process
 /// * `ctx` - Transaction context for the operation
-///
+///s
 /// # Security Notes
 /// This function handles sensitive cryptographic material and should be called
 /// only after successful completion of the first DKG round.
@@ -339,8 +337,6 @@ public fun multisig_dkg_second_round(
 /// # Arguments
 /// * `self` - Mutable reference to the multisig wallet
 /// * `coordinator` - The IKA dWallet coordinator managing the process
-/// * `payment_ika` - IKA tokens for paying the protocol fees
-/// * `payment_sui` - SUI tokens for paying the protocol fees
 /// * `encrypted_user_secret_key_share_id` - ID of the encrypted secret key share to accept
 /// * `user_output_signature` - User's signature on the output for verification
 /// * `public_user_secret_key_shares` - Public portion of the secret key shares to publish
@@ -500,9 +496,6 @@ public fun vote_request(
 /// # Arguments
 /// * `self` - Mutable reference to the multisig wallet
 /// * `coordinator` - The IKA dWallet coordinator for Bitcoin transaction signing
-/// * `payment_ika` - IKA tokens for paying Bitcoin transaction fees
-/// * `payment_sui` - SUI tokens for paying Bitcoin transaction fees
-/// * `message_centralized_signature` - Optional centralized signature for Bitcoin transactions
 /// * `request_id` - The unique ID of the request to execute
 /// * `clock` - Clock for checking request expiration before execution
 /// * `ctx` - Transaction context for the operation
@@ -628,10 +621,9 @@ public fun execute_request(
 /// # Arguments
 /// * `self` - Mutable reference to the multisig wallet
 /// * `coordinator` - The IKA dWallet coordinator for signature operations
-/// * `payment_ika` - IKA tokens for paying protocol fees
-/// * `payment_sui` - SUI tokens for paying protocol fees
 /// * `transaction_hex` - Complete serialized Bitcoin transaction in hexadecimal format
 /// * `message_centralized_signature` - Centralized signature component for the transaction
+/// * `clock` - Clock for getting the current timestamp for request expiration tracking
 /// * `ctx` - Transaction context for the operation
 ///
 /// # Returns
