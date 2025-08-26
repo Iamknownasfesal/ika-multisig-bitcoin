@@ -1,3 +1,6 @@
+// Copyright (c) dWallet Labs, Ltd.
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 /// Bitcoin Multisig Wallet Module with IKA dWallet 2PC-MPC protocol
 ///
 /// This module implements a distributed multi-signature wallet system for Bitcoin transactions
