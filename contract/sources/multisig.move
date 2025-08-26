@@ -111,10 +111,10 @@ public struct Request has store {
     /// This prevents vote manipulation and ensures decision finality.
     votes: Table<address, bool>,
     /// Unverified partial user signature capability for Bitcoin transactions.
-    /// This field is only populated for SendBTC requests and contains the capability
+    /// This field is only populated for Transaction requests and contains the capability
     /// needed to sign the Bitcoin transaction with the user's public share.
     /// The capability must be verified before it can be used for signing operations.
-    send_btc_unverified_partial_user_signature_cap: Option<UnverifiedPartialUserSignatureCap>,
+    tx_unverified_partial_user_signature_cap: Option<UnverifiedPartialUserSignatureCap>,
 }
 
 /// Tracks the complete lifecycle of a multisig request from creation to final resolution.
@@ -151,7 +151,7 @@ public enum RequestType has copy, drop, store {
     ///
     /// This request type requires approval_threshold votes to execute and will trigger
     /// Bitcoin transaction signing through the IKA dWallet protocol when approved.
-    SendBTC(vector<u8>, vector<u8>),
+    Transaction(vector<u8>, vector<u8>),
     /// Governance request to add a new member to the multisig wallet.
     /// - Parameter (address): Sui address of the new member to add to the members vector
     ///
@@ -194,7 +194,7 @@ public enum RequestResult has copy, drop, store {
     /// Bitcoin transaction successfully signed and ready for broadcast.
     /// Contains the signature request ID that can be used to retrieve the final signature
     /// from the IKA dWallet coordinator. The transaction is now ready for Bitcoin network submission.
-    SendBTC(ID),
+    Transaction(ID),
     /// New member successfully added to the multisig wallet.
     /// Contains the address of the member that was added to the members vector.
     /// This member can now participate in future voting processes.
@@ -551,9 +551,9 @@ public fun execute_request(
     };
 
     let result = match (request.request_type) {
-        RequestType::SendBTC(message, _message_centralized_signature) => {
+        RequestType::Transaction(message, _message_centralized_signature) => {
             let unverified_partial_user_signature_cap = request
-                .send_btc_unverified_partial_user_signature_cap
+                .tx_unverified_partial_user_signature_cap
                 .extract();
 
             let verified_partial_user_signature_cap = coordinator.verify_partial_user_signature_cap(
@@ -579,7 +579,7 @@ public fun execute_request(
                 ctx,
             );
 
-            RequestResult::SendBTC(sign_id)
+            RequestResult::Transaction(sign_id)
         },
         RequestType::AddMember(member_address) => {
             self.members.push_back(member_address);
@@ -612,7 +612,7 @@ public fun execute_request(
 // === Request Creation Functions ===
 
 /// Creates a Bitcoin transaction request with all necessary signing components.
-/// This function constructs a complete SendBTC request by creating the necessary
+/// This function constructs a complete Transaction request by creating the necessary
 /// partial user signature capability and preparing all components for multisig signing.
 ///
 /// The function handles the complex setup required for Bitcoin transaction signing,
@@ -638,7 +638,7 @@ public fun execute_request(
 /// # Usage
 /// This request type requires approval_threshold votes to execute and will
 /// trigger Bitcoin transaction signing through the IKA dWallet protocol.
-public fun send_btc_request(
+public fun transaction_request(
     self: &mut Multisig,
     coordinator: &mut DWalletCoordinator,
     transaction_hex: vector<u8>,
@@ -682,7 +682,7 @@ public fun send_btc_request(
     return_payment_coins(self, payment_ika, payment_sui);
 
     self.new_request(
-        RequestType::SendBTC(transaction_hex, message_centralized_signature),
+        RequestType::Transaction(transaction_hex, message_centralized_signature),
         option::some(unverified_partial_user_signature_cap_from_request_sign),
         clock,
         ctx,
@@ -924,7 +924,7 @@ fun new_request(
         approvers_count: 0,
         rejecters_count: 0,
         votes: table::new(ctx),
-        send_btc_unverified_partial_user_signature_cap: unverified_partial_user_signature_cap,
+        tx_unverified_partial_user_signature_cap: unverified_partial_user_signature_cap,
     };
 
     self.request_id_counter = self.request_id_counter + 1;
