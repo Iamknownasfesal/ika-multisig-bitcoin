@@ -95,7 +95,7 @@ public struct Request has store {
     votes: Table<address, bool>,
     /// Unverified partial user signature capability for Bitcoin transactions.
     /// This field is only populated for SendBTC requests and contains the capability
-    /// needed to sign the Bitcoin transaction with the user's private key share.
+    /// needed to sign the Bitcoin transaction with the user's public share.
     /// The capability must be verified before it can be used for signing operations.
     send_btc_unverified_partial_user_signature_cap: Option<UnverifiedPartialUserSignatureCap>,
 }
