@@ -5,18 +5,30 @@
 ///
 /// This module implements a distributed multi-signature wallet system for Bitcoin transactions
 /// using the IKA dWallet 2PC-MPC protocol. It allows multiple members to collectively approve
-/// or reject Bitcoin transactions before execution.
+/// or reject Bitcoin transactions before execution, providing enhanced security through
+/// distributed key management and threshold-based decision making.
 ///
-/// Key Features:
-/// - Configurable approval and rejection thresholds
-/// - Time-based request expiration
-/// - Irrevocable voting (once voted, members cannot change their decision)
-/// - Integration with IKA's distributed wallet protocol for enhanced security
+/// # Key Features
+/// - **Configurable Thresholds**: Flexible approval and rejection thresholds for different security requirements
+/// - **Time-based Expiration**: Automatic request expiration to prevent stale transactions
+/// - **Irrevocable Voting**: Once cast, votes cannot be changed to prevent manipulation
+/// - **Governance Operations**: Support for adding/removing members and modifying wallet parameters
+/// - **Distributed Key Generation**: Integration with IKA's 2PC-MPC protocol for enhanced security
+/// - **Balance Management**: Built-in support for funding protocol fees with IKA and SUI tokens
 ///
-/// Security Considerations:
-/// - All voting decisions are final and cannot be changed
-/// - Requests automatically expire after a configured duration
-/// - Threshold validation prevents single points of failure
+/// # Security Considerations
+/// - All voting decisions are final and cannot be changed once cast
+/// - Requests automatically expire after a configured duration to prevent indefinite pending states
+/// - Threshold validation ensures no single point of failure in the approval process
+/// - Cryptographic operations are handled by the secure IKA dWallet protocol
+/// - All state changes are atomic and consistent across the distributed system
+///
+/// # Usage Workflow
+/// 1. **Initialization**: Create wallet with `new_multisig()` and complete DKG rounds
+/// 2. **Funding**: Add IKA/SUI balances using `add_ika_balance()` and `add_sui_balance()`
+/// 3. **Request Creation**: Members create requests using specific request functions
+/// 4. **Voting**: Members cast irrevocable votes using `vote_request()`
+/// 5. **Execution**: Approved requests are executed using `execute_request()`
 module ika_btc_multisig::multisig;
 
 use ika::ika::IKA;
@@ -30,6 +42,7 @@ use ika_dwallet_2pc_mpc::{
     sessions_manager::SessionIdentifier
 };
 use sui::{clock::Clock, coin::Coin, sui::SUI, table::{Self, Table}};
+use sui::balance::Balance;
 
 // === Structs ===
 
@@ -66,6 +79,10 @@ public struct Multisig has key, store {
     /// These capabilities represent requested presign sessions that must be verified
     /// as completed before they can be converted to VerifiedPresignCap for signing operations.
     presigns: vector<UnverifiedPresignCap>,
+    /// IKA balance of the multisig wallet. Used for paying protocol fees.
+    ika_balance: Balance<IKA>,
+    /// SUI balance of the multisig wallet. Used for paying protocol fees.
+    sui_balance: Balance<SUI>,
 }
 
 /// Represents a Bitcoin transaction request that needs multisig approval.
@@ -124,33 +141,46 @@ public enum RequestStatus has copy, drop, store {
 /// Defines the various types of requests that can be submitted to the multisig wallet.
 /// Each variant represents a different governance or operational action that requires collective approval.
 /// All request types follow the same voting and approval process but have different execution logic.
+///
+/// The enum variants contain all necessary data for executing the specific request type.
+/// Each variant corresponds to a specific function that creates requests of that type.
 public enum RequestType has copy, drop, store {
-    /// Bitcoin transaction request containing transaction data and signature information.
-    /// Parameters: (transaction_hex, centralized_signature, partial_user_signature_cap_id)
-    /// - transaction_hex: Complete serialized Bitcoin transaction ready for signing
-    /// - centralized_signature: Centralized signature component for the transaction
-    /// - partial_user_signature_cap_id: ID of the unverified partial user signature capability
-    /// Requires approval_threshold votes to execute the transaction on the Bitcoin network.
+    /// Bitcoin transaction request containing all necessary data for signing and broadcasting.
+    /// - Parameter 1 (vector<u8>): Complete serialized Bitcoin transaction in hexadecimal format
+    /// - Parameter 2 (vector<u8>): Centralized signature component for the transaction
+    ///
+    /// This request type requires approval_threshold votes to execute and will trigger
+    /// Bitcoin transaction signing through the IKA dWallet protocol when approved.
     SendBTC(vector<u8>, vector<u8>),
     /// Governance request to add a new member to the multisig wallet.
-    /// The address specifies the new member to be added to the members vector.
-    /// Affects future voting thresholds and requires careful consideration.
+    /// - Parameter (address): Sui address of the new member to add to the members vector
+    ///
+    /// Adding members increases the total voting power and may affect threshold calculations.
+    /// The new member gains full voting rights immediately upon approval and execution.
     AddMember(address),
     /// Governance request to remove an existing member from the multisig wallet.
-    /// The address specifies the member to be removed from the members vector.
-    /// May affect existing requests if the removed member had already voted.
+    /// - Parameter (address): Sui address of the member to remove from the members vector
+    ///
+    /// Removing members decreases the total voting power and may affect existing requests
+    /// if the removed member had already voted. Existing votes from removed members remain valid.
     RemoveMember(address),
-    /// Governance request to modify the approval threshold for transactions.
-    /// The new threshold must be > 0 and <= current member count.
-    /// Increasing the threshold makes transactions harder to approve.
+    /// Governance request to modify the approval threshold for transaction requests.
+    /// - Parameter (u64): New approval threshold value (> 0 and <= current member count)
+    ///
+    /// Increasing the threshold makes transactions harder to approve (more secure).
+    /// Decreasing the threshold makes transactions easier to approve (less secure).
     ChangeApprovalThreshold(u64),
     /// Governance request to modify the rejection threshold for requests.
-    /// The new threshold must be > 0 and <= current member count.
-    /// Decreasing the threshold makes it easier to reject requests.
+    /// - Parameter (u64): New rejection threshold value (> 0 and <= current member count)
+    ///
+    /// Increasing the threshold makes rejection harder (more secure for approvals).
+    /// Decreasing the threshold makes rejection easier (less secure for approvals).
     ChangeRejectionThreshold(u64),
     /// Governance request to modify the expiration duration for new requests.
-    /// The new duration is specified in seconds and affects all future requests.
-    /// Setting this too low may cause requests to expire before voting completes.
+    /// - Parameter (u64): New expiration duration in milliseconds (> 0)
+    ///
+    /// Longer durations provide more time for voting but increase the window for potential issues.
+    /// Shorter durations ensure timely processing but may cause requests to expire before completion.
     ChangeExpirationDuration(u64),
 }
 
@@ -213,8 +243,8 @@ public enum RequestResult has copy, drop, store {
 /// * Caller must have sufficient IKA and SUI tokens for DKG fees
 public fun new_multisig(
     coordinator: &mut DWalletCoordinator,
-    payment_ika: &mut Coin<IKA>,
-    payment_sui: &mut Coin<SUI>,
+    mut initial_ika_coin_for_balance: Coin<IKA>,
+    mut initial_sui_coin_for_balance: Coin<SUI>,
     dwallet_network_encryption_key_id: ID,
     members: vector<address>,
     approval_threshold: u64,
@@ -234,8 +264,8 @@ public fun new_multisig(
         dwallet_network_encryption_key_id,
         constants::curve!(),
         session_identifier,
-        payment_ika,
-        payment_sui,
+        &mut initial_ika_coin_for_balance,
+        &mut initial_sui_coin_for_balance,
         ctx,
     );
 
@@ -249,6 +279,8 @@ public fun new_multisig(
         expiration_duration: expiration_duration,
         request_id_counter: 0,
         presigns: vector::empty(),
+        ika_balance: initial_ika_coin_for_balance.into_balance(),
+        sui_balance: initial_sui_coin_for_balance.into_balance(),
     };
 
     transfer::public_share_object(multisig);
@@ -276,13 +308,13 @@ public fun multisig_dkg_second_round(
     self: &mut Multisig,
     coordinator: &mut DWalletCoordinator,
     first_round_session_identifier: SessionIdentifier,
-    payment_ika: &mut Coin<IKA>,
-    payment_sui: &mut Coin<SUI>,
     centralized_public_key_share_and_proof: vector<u8>,
     encrypted_centralized_secret_share_and_proof: vector<u8>,
     user_public_output: vector<u8>,
     ctx: &mut TxContext,
 ) {
+    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+    
     coordinator.request_dwallet_dkg_second_round(
         &self.dwallet_cap,
         centralized_public_key_share_and_proof,
@@ -291,10 +323,12 @@ public fun multisig_dkg_second_round(
         user_public_output,
         constants::signer_public_key!(),
         first_round_session_identifier,
-        payment_ika,
-        payment_sui,
+        &mut payment_ika,
+        &mut payment_sui,
         ctx,
     );
+
+    return_payment_coins(self, payment_ika, payment_sui);
 }
 
 /// Accepts the encrypted user secret key share and makes user share publicly available.
@@ -324,13 +358,13 @@ public fun multisig_dkg_second_round(
 public fun multisig_accept_and_share(
     self: &mut Multisig,
     coordinator: &mut DWalletCoordinator,
-    payment_ika: &mut Coin<IKA>,
-    payment_sui: &mut Coin<SUI>,
     encrypted_user_secret_key_share_id: ID,
     user_output_signature: vector<u8>,
     public_user_secret_key_shares: vector<u8>,
     ctx: &mut TxContext,
 ) {
+    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+
     coordinator.accept_encrypted_user_share(
         self.dwallet_cap.dwallet_id(),
         encrypted_user_secret_key_share_id,
@@ -343,8 +377,8 @@ public fun multisig_accept_and_share(
         self.dwallet_cap.dwallet_id(),
         public_user_secret_key_shares,
         session_identifier,
-        payment_ika,
-        payment_sui,
+        &mut payment_ika,
+        &mut payment_sui,
         ctx,
     );
 
@@ -356,10 +390,50 @@ public fun multisig_accept_and_share(
             self.dwallet_cap.dwallet_id(),
             constants::curve!(),
             session_identifier,
-            payment_ika,
-            payment_sui,
+            &mut payment_ika,
+            &mut payment_sui,
             ctx,
         ));
+
+    return_payment_coins(self, payment_ika, payment_sui);
+}
+
+/// Adds IKA tokens to the multisig wallet's balance for paying protocol fees.
+/// This function allows topping up the wallet's IKA token reserves that are used
+/// to pay for distributed key generation, presign, and signing operations.
+///
+/// # Arguments
+/// * `self` - Mutable reference to the multisig wallet
+/// * `ika_coin` - IKA coin to add to the wallet's balance
+///
+/// # Usage
+/// Use this function to fund the wallet with IKA tokens before performing
+/// operations that require protocol fees. The tokens are stored in the
+/// wallet's balance and automatically used when needed.
+public fun add_ika_balance(
+    self: &mut Multisig,
+    ika_coin: Coin<IKA>,
+) {
+    self.ika_balance.join(ika_coin.into_balance());
+}
+
+/// Adds SUI tokens to the multisig wallet's balance for paying protocol fees.
+/// This function allows topping up the wallet's SUI token reserves that are used
+/// to pay for distributed key generation, presign, and signing operations.
+///
+/// # Arguments
+/// * `self` - Mutable reference to the multisig wallet
+/// * `sui_coin` - SUI coin to add to the wallet's balance
+///
+/// # Usage
+/// Use this function to fund the wallet with SUI tokens before performing
+/// operations that require protocol fees. The tokens are stored in the
+/// wallet's balance and automatically used when needed.
+public fun add_sui_balance(
+    self: &mut Multisig,
+    sui_coin: Coin<SUI>,
+) {
+    self.sui_balance.join(sui_coin.into_balance());
 }
 
 /// Casts a vote on an existing multisig request.
@@ -458,16 +532,17 @@ public fun vote_request(
 public fun execute_request(
     self: &mut Multisig,
     coordinator: &mut DWalletCoordinator,
-    payment_ika: &mut Coin<IKA>,
-    payment_sui: &mut Coin<SUI>,
     request_id: u64,
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
+    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+
     let request = self.requests.borrow_mut(request_id);
 
     if (clock.timestamp_ms() > request.created_at + self.expiration_duration) {
         request.status = RequestStatus::Rejected;
+        return_payment_coins(self, payment_ika, payment_sui);
         return
     };
 
@@ -478,6 +553,7 @@ public fun execute_request(
 
     if (request.rejecters_count >= self.rejection_threshold) {
         request.status = RequestStatus::Rejected;
+        return_payment_coins(self, payment_ika, payment_sui);
         return
     };
 
@@ -505,8 +581,8 @@ public fun execute_request(
                 verified_partial_user_signature_cap,
                 message_approval,
                 session_identifier,
-                payment_ika,
-                payment_sui,
+                &mut payment_ika,
+                &mut payment_sui,
                 ctx,
             );
 
@@ -536,6 +612,8 @@ public fun execute_request(
     };
 
     request.status = RequestStatus::Approved(result);
+
+    return_payment_coins(self, payment_ika, payment_sui);
 }
 
 // === Request Creation Functions ===
@@ -571,13 +649,13 @@ public fun execute_request(
 public fun send_btc_request(
     self: &mut Multisig,
     coordinator: &mut DWalletCoordinator,
-    payment_ika: &mut Coin<IKA>,
-    payment_sui: &mut Coin<SUI>,
     transaction_hex: vector<u8>,
     message_centralized_signature: vector<u8>,
     clock: &Clock,
     ctx: &mut TxContext,
 ): u64 {
+    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+
     let session_identifier = random_session_identifier(coordinator, ctx);
     let unverified_presign_cap = self.presigns.swap_remove(0);
     let verified_presign_cap = coordinator.verify_presign_cap(unverified_presign_cap, ctx);
@@ -589,8 +667,8 @@ public fun send_btc_request(
         constants::hash_scheme!(),
         message_centralized_signature,
         session_identifier,
-        payment_ika,
-        payment_sui,
+        &mut payment_ika,
+        &mut payment_sui,
         ctx,
     );
 
@@ -603,11 +681,13 @@ public fun send_btc_request(
                 self.dwallet_cap.dwallet_id(),
                 constants::curve!(),
                 session_identifier,
-                payment_ika,
-                payment_sui,
+                &mut payment_ika,
+                &mut payment_sui,
                 ctx,
             ));
     };
+
+    return_payment_coins(self, payment_ika, payment_sui);
 
     self.new_request(
         RequestType::SendBTC(transaction_hex, message_centralized_signature),
@@ -787,7 +867,7 @@ public fun change_expiration_duration_request(
     )
 }
 
-// === Private Functions ===
+// === Private Helper Functions ===
 
 /// Generates a random session identifier for DKG operations.
 /// Uses the transaction context's fresh object address to create a unique identifier.
@@ -817,14 +897,13 @@ fun random_session_identifier(
 /// of members before it can be executed. Only multisig members can create requests.
 ///
 /// For SendBTC requests, the unverified partial user signature capability is validated
-/// and stored for later use during execution.
+/// and stored for later use during execution. The capability is created by the calling
+/// function and passed in as an Option parameter.
 ///
 /// # Arguments
 /// * `self` - Mutable reference to the multisig wallet
 /// * `request_type` - The type of request to create (SendBTC, AddMember, etc.)
-/// * `unverified_partial_user_signature_cap` - Required for SendBTC requests, capability for signing
-/// * `payment_ika` - IKA tokens for paying protocol fees
-/// * `payment_sui` - SUI tokens for paying protocol fees
+/// * `unverified_partial_user_signature_cap` - Optional capability for SendBTC requests
 /// * `clock` - Clock for getting the current timestamp for expiration tracking
 /// * `ctx` - Transaction context for the operation
 ///
@@ -861,4 +940,48 @@ fun new_request(
     self.requests.add(self.request_id_counter, request);
 
     self.request_id_counter
+}
+
+/// Withdraws all IKA and SUI tokens from the multisig wallet's balance for payment.
+/// This helper function extracts all available tokens from the wallet's balances
+/// to use for paying protocol fees in IKA dWallet operations.
+///
+/// # Arguments
+/// * `self` - Mutable reference to the multisig wallet
+/// * `ctx` - Transaction context for creating the coin objects
+///
+/// # Returns
+/// A tuple containing the withdrawn IKA and SUI coins
+///
+/// # Security Notes
+/// This function withdraws all available tokens. Ensure that return_payment_coins
+/// is called to restore any unused funds to maintain the wallet's balance.
+fun withdraw_payment_coins(
+    self: &mut Multisig,
+    ctx: &mut TxContext,
+): (Coin<IKA>, Coin<SUI>) {
+    let payment_ika = self.ika_balance.withdraw_all().into_coin(ctx);
+    let payment_sui = self.sui_balance.withdraw_all().into_coin(ctx);
+    (payment_ika, payment_sui)
+}
+
+/// Returns unused payment coins back to the multisig wallet's balance.
+/// This helper function restores any remaining IKA and SUI tokens to the wallet's
+/// balances after completing protocol operations that required payment.
+///
+/// # Arguments
+/// * `self` - Mutable reference to the multisig wallet
+/// * `payment_ika` - Remaining IKA coin to return to balance
+/// * `payment_sui` - Remaining SUI coin to return to balance
+///
+/// # Usage
+/// Always call this function after protocol operations to ensure unused
+/// payment funds are returned to the wallet's balance for future use.
+fun return_payment_coins(
+    self: &mut Multisig,
+    payment_ika: Coin<IKA>,
+    payment_sui: Coin<SUI>,
+) {
+    self.ika_balance.join(payment_ika.into_balance());
+    self.sui_balance.join(payment_sui.into_balance());
 }
