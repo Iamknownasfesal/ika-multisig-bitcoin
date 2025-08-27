@@ -3,9 +3,8 @@
 
 module ika_btc_multisig::multisig_request;
 
-use sui::table::{Self, Table};
 use ika_dwallet_2pc_mpc::coordinator_inner::UnverifiedPartialUserSignatureCap;
-use sui::clock::Clock;
+use sui::{clock::Clock, table::{Self, Table}};
 
 /// Represents a Bitcoin transaction request that needs multisig approval.
 /// Each request contains the transaction details and tracks voting progress.
@@ -167,69 +166,47 @@ public(package) fun request_transaction(
     RequestType::Transaction(transaction_hex, message_centralized_signature)
 }
 
-public(package) fun request_add_member(
-    member_address: address,
-): RequestType {
+public(package) fun request_add_member(member_address: address): RequestType {
     RequestType::AddMember(member_address)
 }
 
-public(package) fun request_remove_member(
-    member_address: address,
-): RequestType {
+public(package) fun request_remove_member(member_address: address): RequestType {
     RequestType::RemoveMember(member_address)
 }
 
-public(package) fun request_change_approval_threshold(
-    new_approval_threshold: u64,
-): RequestType {
+public(package) fun request_change_approval_threshold(new_approval_threshold: u64): RequestType {
     RequestType::ChangeApprovalThreshold(new_approval_threshold)
 }
 
-public(package) fun request_change_rejection_threshold(
-    new_rejection_threshold: u64,
-): RequestType {
+public(package) fun request_change_rejection_threshold(new_rejection_threshold: u64): RequestType {
     RequestType::ChangeRejectionThreshold(new_rejection_threshold)
 }
 
-public(package) fun request_change_expiration_duration(
-    new_expiration_duration: u64,
-): RequestType {
+public(package) fun request_change_expiration_duration(new_expiration_duration: u64): RequestType {
     RequestType::ChangeExpirationDuration(new_expiration_duration)
 }
 
-public(package) fun status(
-    request: &mut Request,
-): &mut RequestStatus {
+public(package) fun status(request: &mut Request): &mut RequestStatus {
     &mut request.status
 }
 
-public(package) fun request_type(
-    request: &mut Request,
-): &mut RequestType {
+public(package) fun request_type(request: &mut Request): &mut RequestType {
     &mut request.request_type
 }
 
-public(package) fun request_created_at(
-    request: &mut Request,
-): &mut u64 {
+public(package) fun request_created_at(request: &mut Request): &mut u64 {
     &mut request.created_at
 }
 
-public(package) fun approvers_count(
-    request: &mut Request,
-): &mut u64 {
+public(package) fun approvers_count(request: &mut Request): &mut u64 {
     &mut request.approvers_count
 }
 
-public(package) fun rejecters_count(
-    request: &mut Request,
-): &mut u64 {
+public(package) fun rejecters_count(request: &mut Request): &mut u64 {
     &mut request.rejecters_count
 }
 
-public(package) fun votes(
-    request: &mut Request,
-): &mut Table<address, bool> {
+public(package) fun votes(request: &mut Request): &mut Table<address, bool> {
     &mut request.votes
 }
 
@@ -239,38 +216,29 @@ public(package) fun tx_unverified_partial_user_signature_cap(
     &mut request.tx_unverified_partial_user_signature_cap
 }
 
-public(package) fun created_at(
-    request: &mut Request,
-): &mut u64 {
+public(package) fun created_at(request: &mut Request): &mut u64 {
     &mut request.created_at
 }
 
 // === Request Result Functions ===
 
-public(package) fun resolve_transaction_request(
-    signature_id: ID,
-): RequestResult {
+public(package) fun resolve_transaction_request(signature_id: ID): RequestResult {
     RequestResult::Transaction(signature_id)
 }
 
-public(package) fun resolve_add_member_request(
-    member_address: address,
-): RequestResult {
+public(package) fun resolve_add_member_request(member_address: address): RequestResult {
     RequestResult::AddMember(member_address)
 }
 
-public(package) fun resolve_remove_member_request(
-    member_address: address,
-): RequestResult {
+public(package) fun resolve_remove_member_request(member_address: address): RequestResult {
     RequestResult::RemoveMember(member_address)
-}   
+}
 
 public(package) fun resolve_change_approval_threshold_request(
     new_approval_threshold: u64,
 ): RequestResult {
     RequestResult::ChangeApprovalThreshold(new_approval_threshold)
 }
-
 
 public(package) fun resolve_change_rejection_threshold_request(
     new_rejection_threshold: u64,
@@ -286,19 +254,15 @@ public(package) fun resolve_change_expiration_duration_request(
 
 // === Request Status Functions ===
 
-public(package) fun pending(
-): RequestStatus {
+public(package) fun pending(): RequestStatus {
     RequestStatus::Pending
 }
 
-public(package) fun approved(
-    result: RequestResult,
-): RequestStatus {
+public(package) fun approved(result: RequestResult): RequestStatus {
     RequestStatus::Approved(result)
 }
 
-public(package) fun rejected(
-): RequestStatus {
+public(package) fun rejected(): RequestStatus {
     RequestStatus::Rejected
 }
 

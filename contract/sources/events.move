@@ -3,16 +3,14 @@
 
 module ika_btc_multisig::multisig_events;
 
-use ika_btc_multisig::event_wrapper::emit_event;
-use ika_btc_multisig::multisig_request::RequestType;
-use ika_btc_multisig::multisig_request::RequestStatus;
+use ika_btc_multisig::{event_wrapper::emit_event, multisig_request::{RequestType, RequestStatus}};
 
 // === Event Structs ===
 
 /// Event emitted when a new multisig wallet is successfully created.
 /// This event marks the beginning of the multisig wallet lifecycle and includes
 /// all the initial configuration parameters that define the wallet's behavior.
-public struct MultisigCreated has drop, copy, store {
+public struct MultisigCreated has copy, drop, store {
     /// Unique identifier of the newly created multisig wallet
     multisig_id: ID,
     /// Initial list of member addresses who can vote on requests
@@ -30,21 +28,21 @@ public struct MultisigCreated has drop, copy, store {
 /// Event emitted when the second round of distributed key generation begins.
 /// This event signals that the multisig wallet has progressed past the initial setup
 /// and is now in the cryptographic key generation phase.
-public struct MultisigDKGSecondRoundStarted has drop, copy, store {
+public struct MultisigDKGSecondRoundStarted has copy, drop, store {
     /// Unique identifier of the multisig wallet entering DKG second round
     multisig_id: ID,
 }
 
 /// Event emitted when the multisig wallet has successfully completed the DKG process
 /// and is ready for use. This marks the transition from setup phase to operational phase.
-public struct MultisigAcceptedAndShared has drop, copy, store {
+public struct MultisigAcceptedAndShared has copy, drop, store {
     /// Unique identifier of the fully initialized multisig wallet
     multisig_id: ID,
 }
 
 /// Event emitted when a new request is created in the multisig wallet.
 /// This event tracks all governance and operational actions that require multisig approval.
-public struct RequestCreated has drop, copy, store {
+public struct RequestCreated has copy, drop, store {
     /// Unique identifier assigned to the newly created request
     request_id: u64,
     /// The type and details of the request (transaction, governance change, etc.)
@@ -55,7 +53,7 @@ public struct RequestCreated has drop, copy, store {
 
 /// Event emitted when a request is resolved (either approved and executed or rejected).
 /// This event marks the completion of the multisig voting and execution process.
-public struct RequestResolved has drop, copy, store {
+public struct RequestResolved has copy, drop, store {
     /// Unique identifier of the resolved request
     request_id: u64,
     /// Final status of the request (Approved with result or Rejected)
@@ -64,7 +62,7 @@ public struct RequestResolved has drop, copy, store {
 
 /// Event emitted when a member casts a vote on a multisig request.
 /// This event tracks all voting activity and is crucial for monitoring request progress.
-public struct VoteRequest has drop, copy, store {
+public struct VoteRequest has copy, drop, store {
     /// Unique identifier of the request being voted on
     request_id: u64,
     /// Address of the member who cast the vote
@@ -79,7 +77,7 @@ public struct VoteRequest has drop, copy, store {
 
 /// Event emitted when IKA or SUI tokens are added to the multisig wallet's balance.
 /// This event tracks balance changes that affect the wallet's ability to pay protocol fees.
-public struct BalanceAdded has drop, copy, store {
+public struct BalanceAdded has copy, drop, store {
     /// Unique identifier of the multisig wallet
     multisig_id: ID,
     /// Address that added the tokens
@@ -92,7 +90,7 @@ public struct BalanceAdded has drop, copy, store {
 
 /// Event emitted when a presign capability is added to the multisig wallet.
 /// This event tracks the addition of signing capabilities required for Bitcoin transactions.
-public struct PresignAdded has drop, copy, store {
+public struct PresignAdded has copy, drop, store {
     /// Unique identifier of the multisig wallet
     multisig_id: ID,
     /// Address that added the presign
@@ -138,9 +136,7 @@ public(package) fun multisig_created(
 ///
 /// # Arguments
 /// * `multisig_id` - Unique identifier of the multisig wallet starting DKG second round
-public(package) fun multisig_dkg_second_round_started(
-    multisig_id: ID,
-) {
+public(package) fun multisig_dkg_second_round_started(multisig_id: ID) {
     emit_event(MultisigDKGSecondRoundStarted {
         multisig_id,
     });
@@ -152,9 +148,7 @@ public(package) fun multisig_dkg_second_round_started(
 ///
 /// # Arguments
 /// * `multisig_id` - Unique identifier of the fully initialized multisig wallet
-public(package) fun multisig_accepted_and_shared(
-    multisig_id: ID,
-) {
+public(package) fun multisig_accepted_and_shared(multisig_id: ID) {
     emit_event(MultisigAcceptedAndShared {
         multisig_id,
     });
@@ -187,10 +181,7 @@ public(package) fun request_created(
 /// # Arguments
 /// * `request_id` - Unique identifier of the resolved request
 /// * `request_status` - Final status (Approved with result or Rejected)
-public(package) fun request_resolved(
-    request_id: u64,
-    request_status: RequestStatus,
-) {
+public(package) fun request_resolved(request_id: u64, request_status: RequestStatus) {
     emit_event(RequestResolved {
         request_id,
         request_status,
@@ -251,11 +242,7 @@ public(package) fun balance_added(
 /// * `multisig_id` - Unique identifier of the multisig wallet
 /// * `added_by` - Address that added the presign
 /// * `presigns_count` - Total number of presigns after addition
-public(package) fun presign_added(
-    multisig_id: ID,
-    added_by: address,
-    presigns_count: u64,
-) {
+public(package) fun presign_added(multisig_id: ID, added_by: address, presigns_count: u64) {
     emit_event(PresignAdded {
         multisig_id,
         added_by,

@@ -85,6 +85,7 @@ public(package) macro fun request_already_passed_threshold(): u64 {
     16
 }
 
+/// Error code for multisig not ready
 public(package) macro fun multisig_not_ready(): u64 {
     17
 }
