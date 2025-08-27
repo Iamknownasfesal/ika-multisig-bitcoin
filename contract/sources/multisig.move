@@ -177,7 +177,6 @@ public fun new_multisig(
 /// # Arguments
 /// * `self` - Mutable reference to the multisig wallet being initialized
 /// * `coordinator` - The IKA dWallet coordinator managing the DKG process
-/// * `first_round_session_identifier` - Session ID from the first DKG round
 /// * `centralized_public_key_share_and_proof` - Public key share with cryptographic proof
 /// * `encrypted_centralized_secret_share_and_proof` - Encrypted secret share with proof
 /// * `user_public_output` - User's public output from the DKG process
@@ -190,13 +189,14 @@ public fun new_multisig(
 public fun multisig_dkg_second_round(
     self: &mut Multisig,
     coordinator: &mut DWalletCoordinator,
-    first_round_session_identifier: SessionIdentifier,
     centralized_public_key_share_and_proof: vector<u8>,
     encrypted_centralized_secret_share_and_proof: vector<u8>,
     user_public_output: vector<u8>,
     ctx: &mut TxContext,
 ) {
     let (mut payment_ika, mut payment_sui) = self.withdraw_payment_coins(ctx);
+
+    let session_identifier = random_session_identifier(coordinator, ctx);
 
     coordinator.request_dwallet_dkg_second_round(
         &self.dwallet_cap,
@@ -205,7 +205,7 @@ public fun multisig_dkg_second_round(
         constants::signer_public_key_address!(),
         user_public_output,
         constants::signer_public_key!(),
-        first_round_session_identifier,
+        session_identifier,
         &mut payment_ika,
         &mut payment_sui,
         ctx,
