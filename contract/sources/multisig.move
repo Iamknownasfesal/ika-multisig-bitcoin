@@ -196,7 +196,7 @@ public fun multisig_dkg_second_round(
     user_public_output: vector<u8>,
     ctx: &mut TxContext,
 ) {
-    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+    let (mut payment_ika, mut payment_sui) = self.withdraw_payment_coins(ctx);
 
     coordinator.request_dwallet_dkg_second_round(
         &self.dwallet_cap,
@@ -213,7 +213,7 @@ public fun multisig_dkg_second_round(
 
     multisig_events::multisig_dkg_second_round_started(object::id(self));
 
-    return_payment_coins(self, payment_ika, payment_sui);
+    self.return_payment_coins(payment_ika, payment_sui);
 }
 
 /// Accepts the encrypted user secret key share and makes user share publicly available.
@@ -246,7 +246,7 @@ public fun multisig_accept_and_share(
     public_user_secret_key_shares: vector<u8>,
     ctx: &mut TxContext,
 ) {
-    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+    let (mut payment_ika, mut payment_sui) = self.withdraw_payment_coins(ctx);
 
     coordinator.accept_encrypted_user_share(
         self.dwallet_cap.dwallet_id(),
@@ -282,7 +282,7 @@ public fun multisig_accept_and_share(
 
     self.ready = true;
 
-    return_payment_coins(self, payment_ika, payment_sui);
+    self.return_payment_coins(payment_ika, payment_sui);
 }
 
 /// Adds IKA tokens to the multisig wallet's balance for paying protocol fees.
@@ -350,7 +350,7 @@ public fun add_presign(
     assert!(self.members.contains(&ctx.sender()), error::caller_not_member!());
     assert!(self.ready, error::multisig_not_ready!());
 
-    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+    let (mut payment_ika, mut payment_sui) = self.withdraw_payment_coins(ctx);
 
     let session_identifier = random_session_identifier(coordinator, ctx);
 
@@ -371,7 +371,7 @@ public fun add_presign(
         self.presigns.length(),
     );
 
-    return_payment_coins(self, payment_ika, payment_sui);
+    self.return_payment_coins(payment_ika, payment_sui);
 }
 
 /// Casts a vote on an existing multisig request.
@@ -407,6 +407,7 @@ public fun vote_request(
     ctx: &mut TxContext,
 ) {
     assert!(self.requests.contains(request_id), error::request_not_found!());
+    let multisig_id = object::id(self);
 
     let request = self.requests.borrow_mut(request_id);
 
@@ -415,8 +416,7 @@ public fun vote_request(
     assert!(!request.votes().contains(ctx.sender()), error::already_voted!());
 
     if (clock.timestamp_ms() > *request.created_at() + self.expiration_duration) {
-        *request.status() = multisig_request::rejected();
-        multisig_events::request_resolved(request_id, *request.status());
+        self.reject_request(request_id);
         return
     };
 
@@ -429,12 +429,12 @@ public fun vote_request(
     };
 
     if (*request.rejecters_count() >= self.rejection_threshold) {
-        *request.status() = multisig_request::rejected();
-        multisig_events::request_resolved(request_id, *request.status());
+        self.reject_request(request_id);
         return
     };
 
     multisig_events::vote_request(
+        multisig_id,
         request_id,
         ctx.sender(),
         vote,
@@ -484,14 +484,14 @@ public fun execute_request(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+    let multisig_id = object::id(self);
+    let (mut payment_ika, mut payment_sui) = self.withdraw_payment_coins(ctx);
 
     let request = self.requests.borrow_mut(request_id);
 
     if (clock.timestamp_ms() > *request.created_at() + self.expiration_duration) {
-        *request.status() = multisig_request::rejected();
-        multisig_events::request_resolved(request_id, *request.status());
-        return_payment_coins(self, payment_ika, payment_sui);
+        self.reject_request(request_id);
+        self.return_payment_coins(payment_ika, payment_sui);
         return
     };
 
@@ -501,9 +501,8 @@ public fun execute_request(
     );
 
     if (*request.rejecters_count() >= self.rejection_threshold) {
-        *request.status() = multisig_request::rejected();
-        multisig_events::request_resolved(request_id, *request.status());
-        return_payment_coins(self, payment_ika, payment_sui);
+        self.reject_request(request_id);
+        self.return_payment_coins(payment_ika, payment_sui);
         return
     };
 
@@ -544,9 +543,8 @@ public fun execute_request(
         let member_address = request_type.get_add_member_address();
 
         if (self.members.contains(&member_address)) {
-            *request.status() = multisig_request::rejected();
-            multisig_events::request_resolved(request_id, *request.status());
-            return_payment_coins(self, payment_ika, payment_sui);
+            self.reject_request(request_id);
+            self.return_payment_coins(payment_ika, payment_sui);
             return
         };
 
@@ -557,9 +555,8 @@ public fun execute_request(
         let mut index = self.members.find_index!(|member| member_address == *member);
 
         if (index.is_none()) {
-            *request.status() = multisig_request::rejected();
-            multisig_events::request_resolved(request_id, *request.status());
-            return_payment_coins(self, payment_ika, payment_sui);
+            self.reject_request(request_id);
+            self.return_payment_coins(payment_ika, payment_sui);
             return
         };
 
@@ -569,9 +566,8 @@ public fun execute_request(
         let new_threshold = request_type.get_change_approval_threshold_value();
 
         if (new_threshold > self.members.length()) {
-            *request.status() = multisig_request::rejected();
-            multisig_events::request_resolved(request_id, *request.status());
-            return_payment_coins(self, payment_ika, payment_sui);
+            self.reject_request(request_id);
+            self.return_payment_coins(payment_ika, payment_sui);
             return
         };
 
@@ -581,9 +577,8 @@ public fun execute_request(
         let new_threshold = request_type.get_change_rejection_threshold_value();
 
         if (new_threshold > self.members.length()) {
-            *request.status() = multisig_request::rejected();
-            multisig_events::request_resolved(request_id, *request.status());
-            return_payment_coins(self, payment_ika, payment_sui);
+            self.reject_request(request_id);
+            self.return_payment_coins(payment_ika, payment_sui);
             return
         };
 
@@ -599,9 +594,9 @@ public fun execute_request(
 
     *request.status() = multisig_request::approved(result);
 
-    multisig_events::request_resolved(request_id, *request.status());
+    multisig_events::request_resolved(multisig_id, request_id, *request.status());
 
-    return_payment_coins(self, payment_ika, payment_sui);
+    self.return_payment_coins(payment_ika, payment_sui);
 }
 
 // === Request Creation Functions ===
@@ -641,7 +636,7 @@ public fun transaction_request(
     clock: &Clock,
     ctx: &mut TxContext,
 ): u64 {
-    let (mut payment_ika, mut payment_sui) = withdraw_payment_coins(self, ctx);
+    let (mut payment_ika, mut payment_sui) = self.withdraw_payment_coins(ctx);
 
     let session_identifier = random_session_identifier(coordinator, ctx);
     let unverified_presign_cap = self.presigns.swap_remove(0);
@@ -674,7 +669,7 @@ public fun transaction_request(
             ));
     };
 
-    return_payment_coins(self, payment_ika, payment_sui);
+    self.return_payment_coins(payment_ika, payment_sui);
 
     self.new_request(
         multisig_request::request_transaction(transaction_hex, message_centralized_signature),
@@ -926,7 +921,12 @@ fun new_request(
 
     self.request_id_counter = self.request_id_counter + 1;
 
-    multisig_events::request_created(self.request_id_counter, request_type, ctx.sender());
+    multisig_events::request_created(
+        object::id(self),
+        self.request_id_counter,
+        request_type,
+        ctx.sender(),
+    );
 
     self.requests.add(self.request_id_counter, request);
 
@@ -968,4 +968,12 @@ fun withdraw_payment_coins(self: &mut Multisig, ctx: &mut TxContext): (Coin<IKA>
 fun return_payment_coins(self: &mut Multisig, payment_ika: Coin<IKA>, payment_sui: Coin<SUI>) {
     self.ika_balance.join(payment_ika.into_balance());
     self.sui_balance.join(payment_sui.into_balance());
+}
+
+fun reject_request(self: &mut Multisig, request_id: u64) {
+    let multisig_id = object::id(self);
+    let request = self.requests.borrow_mut(request_id);
+    *request.status() = multisig_request::rejected();
+
+    multisig_events::request_resolved(multisig_id, request_id, *request.status());
 }

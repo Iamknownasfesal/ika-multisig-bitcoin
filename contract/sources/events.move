@@ -43,6 +43,8 @@ public struct MultisigAcceptedAndShared has copy, drop, store {
 /// Event emitted when a new request is created in the multisig wallet.
 /// This event tracks all governance and operational actions that require multisig approval.
 public struct RequestCreated has copy, drop, store {
+    /// Unique identifier of the multisig wallet
+    multisig_id: ID,
     /// Unique identifier assigned to the newly created request
     request_id: u64,
     /// The type and details of the request (transaction, governance change, etc.)
@@ -54,6 +56,8 @@ public struct RequestCreated has copy, drop, store {
 /// Event emitted when a request is resolved (either approved and executed or rejected).
 /// This event marks the completion of the multisig voting and execution process.
 public struct RequestResolved has copy, drop, store {
+    /// Unique identifier of the multisig wallet
+    multisig_id: ID,
     /// Unique identifier of the resolved request
     request_id: u64,
     /// Final status of the request (Approved with result or Rejected)
@@ -63,6 +67,8 @@ public struct RequestResolved has copy, drop, store {
 /// Event emitted when a member casts a vote on a multisig request.
 /// This event tracks all voting activity and is crucial for monitoring request progress.
 public struct VoteRequest has copy, drop, store {
+    /// Unique identifier of the multisig wallet
+    multisig_id: ID,
     /// Unique identifier of the request being voted on
     request_id: u64,
     /// Address of the member who cast the vote
@@ -159,15 +165,18 @@ public(package) fun multisig_accepted_and_shared(multisig_id: ID) {
 /// request creation functions (transaction_request, add_member_request, etc.).
 ///
 /// # Arguments
+/// * `multisig_id` - Unique identifier of the multisig wallet
 /// * `request_id` - Unique identifier assigned to the new request
 /// * `request_type` - Type and details of the request being created
 /// * `created_by` - Address of the member who created the request
 public(package) fun request_created(
+    multisig_id: ID,
     request_id: u64,
     request_type: RequestType,
     created_by: address,
 ) {
     emit_event(RequestCreated {
+        multisig_id,
         request_id,
         request_type,
         created_by,
@@ -179,10 +188,16 @@ public(package) fun request_created(
 /// or definitively rejected, marking the end of the request's lifecycle.
 ///
 /// # Arguments
+/// * `multisig_id` - Unique identifier of the multisig wallet
 /// * `request_id` - Unique identifier of the resolved request
 /// * `request_status` - Final status (Approved with result or Rejected)
-public(package) fun request_resolved(request_id: u64, request_status: RequestStatus) {
+public(package) fun request_resolved(
+    multisig_id: ID,
+    request_id: u64,
+    request_status: RequestStatus,
+) {
     emit_event(RequestResolved {
+        multisig_id,
         request_id,
         request_status,
     });
@@ -192,12 +207,14 @@ public(package) fun request_resolved(request_id: u64, request_status: RequestSta
 /// This function should be called after successfully recording a vote.
 ///
 /// # Arguments
+/// * `multisig_id` - Unique identifier of the multisig wallet
 /// * `request_id` - Unique identifier of the request being voted on
 /// * `voter` - Address of the member who cast the vote
 /// * `vote` - The vote decision (true for approval, false for rejection)
 /// * `approvers_count` - Current approval count after this vote
 /// * `rejecters_count` - Current rejection count after this vote
 public(package) fun vote_request(
+    multisig_id: ID,
     request_id: u64,
     voter: address,
     vote: bool,
@@ -205,6 +222,7 @@ public(package) fun vote_request(
     rejecters_count: u64,
 ) {
     emit_event(VoteRequest {
+        multisig_id,
         request_id,
         voter,
         vote,
