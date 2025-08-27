@@ -62,6 +62,45 @@ public struct RequestResolved has drop, copy, store {
     request_status: RequestStatus,
 }
 
+/// Event emitted when a member casts a vote on a multisig request.
+/// This event tracks all voting activity and is crucial for monitoring request progress.
+public struct VoteRequest has drop, copy, store {
+    /// Unique identifier of the request being voted on
+    request_id: u64,
+    /// Address of the member who cast the vote
+    voter: address,
+    /// The vote decision (true for approval, false for rejection)
+    vote: bool,
+    /// Current approval count after this vote
+    approvers_count: u64,
+    /// Current rejection count after this vote
+    rejecters_count: u64,
+}
+
+/// Event emitted when IKA or SUI tokens are added to the multisig wallet's balance.
+/// This event tracks balance changes that affect the wallet's ability to pay protocol fees.
+public struct BalanceAdded has drop, copy, store {
+    /// Unique identifier of the multisig wallet
+    multisig_id: ID,
+    /// Address that added the tokens
+    added_by: address,
+    /// Amount of IKA tokens added (0 if SUI was added)
+    ika_amount: u64,
+    /// Amount of SUI tokens added (0 if IKA was added)
+    sui_amount: u64,
+}
+
+/// Event emitted when a presign capability is added to the multisig wallet.
+/// This event tracks the addition of signing capabilities required for Bitcoin transactions.
+public struct PresignAdded has drop, copy, store {
+    /// Unique identifier of the multisig wallet
+    multisig_id: ID,
+    /// Address that added the presign
+    added_by: address,
+    /// Total number of presigns after addition
+    presigns_count: u64,
+}
+
 // === Public(Package) Functions ===
 
 /// Emits a MultisigCreated event when a new multisig wallet is initialized.
@@ -155,5 +194,71 @@ public(package) fun request_resolved(
     emit_event(RequestResolved {
         request_id,
         request_status,
+    });
+}
+
+/// Emits a VoteRequest event when a member votes on a multisig request.
+/// This function should be called after successfully recording a vote.
+///
+/// # Arguments
+/// * `request_id` - Unique identifier of the request being voted on
+/// * `voter` - Address of the member who cast the vote
+/// * `vote` - The vote decision (true for approval, false for rejection)
+/// * `approvers_count` - Current approval count after this vote
+/// * `rejecters_count` - Current rejection count after this vote
+public(package) fun vote_request(
+    request_id: u64,
+    voter: address,
+    vote: bool,
+    approvers_count: u64,
+    rejecters_count: u64,
+) {
+    emit_event(VoteRequest {
+        request_id,
+        voter,
+        vote,
+        approvers_count,
+        rejecters_count,
+    });
+}
+
+/// Emits a BalanceAdded event when tokens are added to the multisig wallet.
+/// This function should be called after successfully adding IKA or SUI tokens.
+///
+/// # Arguments
+/// * `multisig_id` - Unique identifier of the multisig wallet
+/// * `added_by` - Address that added the tokens
+/// * `ika_amount` - Amount of IKA tokens added (0 if SUI was added)
+/// * `sui_amount` - Amount of SUI tokens added (0 if IKA was added)
+public(package) fun balance_added(
+    multisig_id: ID,
+    added_by: address,
+    ika_amount: u64,
+    sui_amount: u64,
+) {
+    emit_event(BalanceAdded {
+        multisig_id,
+        added_by,
+        ika_amount,
+        sui_amount,
+    });
+}
+
+/// Emits a PresignAdded event when a presign capability is added.
+/// This function should be called after successfully adding a presign.
+///
+/// # Arguments
+/// * `multisig_id` - Unique identifier of the multisig wallet
+/// * `added_by` - Address that added the presign
+/// * `presigns_count` - Total number of presigns after addition
+public(package) fun presign_added(
+    multisig_id: ID,
+    added_by: address,
+    presigns_count: u64,
+) {
+    emit_event(PresignAdded {
+        multisig_id,
+        added_by,
+        presigns_count,
     });
 }

@@ -300,8 +300,17 @@ public fun multisig_accept_and_share(
 public fun add_ika_balance(
     self: &mut Multisig,
     ika_coin: Coin<IKA>,
+    ctx: &TxContext,
 ) {
+    let amount = ika_coin.value();
     self.ika_balance.join(ika_coin.into_balance());
+
+    multisig_events::balance_added(
+        object::id(self),
+        ctx.sender(),
+        amount,
+        0
+    );
 }
 
 /// Adds SUI tokens to the multisig wallet's balance for paying protocol fees.
@@ -319,8 +328,17 @@ public fun add_ika_balance(
 public fun add_sui_balance(
     self: &mut Multisig,
     sui_coin: Coin<SUI>,
+    ctx: &TxContext,
 ) {
+    let amount = sui_coin.value();
     self.sui_balance.join(sui_coin.into_balance());
+
+    multisig_events::balance_added(
+        object::id(self),
+        ctx.sender(),
+        0,
+        amount
+    );
 }
 
 /// Adds a presign capability to the multisig wallet.
@@ -352,6 +370,12 @@ public fun add_presign(
         &mut payment_sui,
         ctx,
     ));
+
+    multisig_events::presign_added(
+        object::id(self),
+        ctx.sender(),
+        self.presigns.length()
+    );
 
     return_payment_coins(self, payment_ika, payment_sui);
 }
@@ -410,6 +434,14 @@ public fun vote_request(
     } else {
         *request.rejecters_count() = *request.rejecters_count() + 1;
     };
+
+    multisig_events::vote_request(
+        request_id,
+        ctx.sender(),
+        vote,
+        *request.approvers_count(),
+        *request.rejecters_count()
+    );
 }
 
 /// Executes an approved request or marks it as rejected.
