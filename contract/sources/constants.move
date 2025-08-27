@@ -8,34 +8,34 @@ module ika_btc_multisig::constants;
 /// Returns the default signer public key for multisig wallet initialization.
 /// This compressed public key serves as a placeholder during distributed key generation.
 /// The actual wallet key is derived from the collective DKG process.
-public macro fun signer_public_key(): vector<u8> {
+public(package) macro fun signer_public_key(): vector<u8> {
     b"020202020202020202020202020202020202020202020202020202020202020202"
 }
 
 /// Returns the corresponding Sui address for the default signer public key.
 /// This zero address acts as a temporary identifier during wallet setup.
 /// The actual wallet address is determined after successful DKG completion.
-public macro fun signer_public_key_address(): address {
+public(package) macro fun signer_public_key_address(): address {
     @0x0000000000000000000000000000000000000000000000000000000000000000
 }
 
 /// Returns the elliptic curve identifier for Bitcoin signature generation.
 /// Uses secp256k1 (curve ID: 0) which is the standard curve for Bitcoin.
 /// This curve provides the cryptographic foundation for all multisig operations.
-public macro fun curve(): u32 {
+public(package) macro fun curve(): u32 {
     0
 }
 
 /// Returns the signature algorithm identifier for Bitcoin signature generation.
 /// Uses the standard Bitcoin signature algorithm (ECDSA) which is the standard algorithm for Bitcoin.
 /// This algorithm provides the cryptographic foundation for all multisig operations.
-public macro fun signature_algorithm(): u32 {
+public(package) macro fun signature_algorithm(): u32 {
     0
 }
 
 /// Returns the hash scheme identifier for Bitcoin signature generation.
 /// Uses the standard Bitcoin hash scheme (SHA256) which is the standard hash scheme for Bitcoin.
 /// This hash scheme provides the cryptographic foundation for all multisig operations.
-public macro fun hash_scheme(): u32 {
+public(package) macro fun hash_scheme(): u32 {
     0
 }
