@@ -292,6 +292,7 @@ public fun multisig_accept_and_share(
 /// # Arguments
 /// * `self` - Mutable reference to the multisig wallet
 /// * `ika_coin` - IKA coin to add to the wallet's balance
+/// * `ctx` - Transaction context for the operation
 ///
 /// # Usage
 /// Use this function to fund the wallet with IKA tokens before performing
