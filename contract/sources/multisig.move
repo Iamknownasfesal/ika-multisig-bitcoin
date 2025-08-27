@@ -43,14 +43,7 @@ use ika_dwallet_2pc_mpc::{
     coordinator_inner::{DWalletCap, UnverifiedPresignCap, UnverifiedPartialUserSignatureCap},
     sessions_manager::SessionIdentifier
 };
-use sui::{
-    balance::Balance,
-    clock::Clock,
-    coin::Coin,
-    sui::SUI,
-    table::{Self, Table},
-    vec_set::{Self, from_keys}
-};
+use sui::{balance::Balance, clock::Clock, coin::Coin, sui::SUI, table::{Self, Table}, vec_set};
 
 // === Structs ===
 
@@ -423,6 +416,7 @@ public fun vote_request(
 
     if (clock.timestamp_ms() > *request.created_at() + self.expiration_duration) {
         *request.status() = multisig_request::rejected();
+        multisig_events::request_resolved(request_id, *request.status());
         return
     };
 
@@ -436,6 +430,7 @@ public fun vote_request(
 
     if (*request.rejecters_count() >= self.rejection_threshold) {
         *request.status() = multisig_request::rejected();
+        multisig_events::request_resolved(request_id, *request.status());
         return
     };
 
@@ -495,6 +490,7 @@ public fun execute_request(
 
     if (clock.timestamp_ms() > *request.created_at() + self.expiration_duration) {
         *request.status() = multisig_request::rejected();
+        multisig_events::request_resolved(request_id, *request.status());
         return_payment_coins(self, payment_ika, payment_sui);
         return
     };
@@ -506,6 +502,7 @@ public fun execute_request(
 
     if (*request.rejecters_count() >= self.rejection_threshold) {
         *request.status() = multisig_request::rejected();
+        multisig_events::request_resolved(request_id, *request.status());
         return_payment_coins(self, payment_ika, payment_sui);
         return
     };
@@ -548,6 +545,7 @@ public fun execute_request(
 
         if (self.members.contains(&member_address)) {
             *request.status() = multisig_request::rejected();
+            multisig_events::request_resolved(request_id, *request.status());
             return_payment_coins(self, payment_ika, payment_sui);
             return
         };
@@ -560,6 +558,7 @@ public fun execute_request(
 
         if (index.is_none()) {
             *request.status() = multisig_request::rejected();
+            multisig_events::request_resolved(request_id, *request.status());
             return_payment_coins(self, payment_ika, payment_sui);
             return
         };
@@ -571,6 +570,7 @@ public fun execute_request(
 
         if (new_threshold > self.members.length()) {
             *request.status() = multisig_request::rejected();
+            multisig_events::request_resolved(request_id, *request.status());
             return_payment_coins(self, payment_ika, payment_sui);
             return
         };
@@ -582,6 +582,7 @@ public fun execute_request(
 
         if (new_threshold > self.members.length()) {
             *request.status() = multisig_request::rejected();
+            multisig_events::request_resolved(request_id, *request.status());
             return_payment_coins(self, payment_ika, payment_sui);
             return
         };
